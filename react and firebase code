@@ -1,0 +1,278 @@
+react-firebase-app/
+
+
+// Sidebar.js
+import React from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
+
+function Sidebar() {
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login");
+  };
+
+  return (
+    <div className="sidebar">
+      <button onClick={() => navigate("/students")}>Students Page</button>
+      <button onClick={handleLogout}>Logout</button>
+    </div>
+  );
+}
+
+export default Sidebar;
+
+│   │   ├── StudentModal.js
+
+// StudentModal.js
+import React, { useState } from "react";
+import { addDoc, collection } from "firebase/firestore";
+import { db } from "../firebase";
+
+function StudentModal({ closeModal, fetchStudents }) {
+  const [student, setStudent] = useState({
+    name: "",
+    class: "",
+    section: "",
+    rollNumber: "",
+  });
+
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setStudent({ ...student, [name]: value });
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    await addDoc(collection(db, "students"), student);
+    fetchStudents();
+    closeModal();
+  };
+
+  return (
+    <div className="modal">
+      <form onSubmit={handleSubmit}>
+        <h2>Add Student</h2>
+        <input
+          type="text"
+          name="name"
+          placeholder="Name"
+          value={student.name}
+          onChange={handleChange}
+        />
+        <input
+          type="text"
+          name="class"
+          placeholder="Class"
+          value={student.class}
+          onChange={handleChange}
+        />
+        <input
+          type="text"
+          name="section"
+          placeholder="Section"
+          value={student.section}
+          onChange={handleChange}
+        />
+        <input
+          type="text"
+          name="rollNumber"
+          placeholder="Roll Number"
+          value={student.rollNumber}
+          onChange={handleChange}
+        />
+        <button type="submit">Submit</button>
+        <button type="button" onClick={closeModal}>Cancel</button>
+      </form>
+    </div>
+  );
+}
+
+export default StudentModal;
+
+│   ├── contexts/
+│   │   ├── AuthContext.js
+
+// AuthContext.js
+import React, { useContext, useState, useEffect } from "react";
+import { auth } from "../firebase";
+import { onAuthStateChanged, signInWithEmailAndPassword, signOut } from "firebase/auth";
+
+const AuthContext = React.createContext();
+
+export function useAuth() {
+  return useContext(AuthContext);
+}
+
+export function AuthProvider({ children }) {
+  const [currentUser, setCurrentUser] = useState(null);
+
+  const login = (email, password) => {
+    return signInWithEmailAndPassword(auth, email, password);
+  };
+
+  const logout = () => {
+    return signOut(auth);
+  };
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setCurrentUser(user);
+    });
+    return unsubscribe;
+  }, []);
+
+  const value = {
+    currentUser,
+    login,
+    logout,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+│   ├── pages/
+│   │   ├── LoginPage.js
+
+// LoginPage.js
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "../contexts/AuthContext";
+
+function LoginPage() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const { login } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await login(email, password);
+      navigate("/students");
+    } catch (error) {
+      alert("Login failed. Please check your credentials.");
+    }
+  };
+
+  return (
+    <div className="login-page">
+      <form onSubmit={handleSubmit}>
+        <h2>Login</h2>
+        <input
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+        />
+        <input
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+        <button type="submit">Login</button>
+      </form>
+    </div>
+  );
+}
+
+export default LoginPage;
+
+│   │   ├── StudentsPage.js
+
+// StudentsPage.js
+import React, { useEffect, useState } from "react";
+import { collection, getDocs, deleteDoc, doc } from "firebase/firestore";
+import { db } from "../firebase";
+import StudentModal from "../components/StudentModal";
+
+function StudentsPage() {
+  const [students, setStudents] = useState([]);
+  const [showModal, setShowModal] = useState(false);
+
+  const fetchStudents = async () => {
+    const studentsCollection = collection(db, "students");
+    const studentsSnapshot = await getDocs(studentsCollection);
+    setStudents(studentsSnapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })));
+  };
+
+  useEffect(() => {
+    fetchStudents();
+  }, []);
+
+  const handleAddStudent = () => setShowModal(true);
+
+  const handleDelete = async (id) => {
+    await deleteDoc(doc(db, "students", id));
+    fetchStudents();
+  };
+
+  return (
+    <div className="students-page">
+      <h1>Students List</h1>
+      <button onClick={handleAddStudent}>Add Student</button>
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Name</th>
+            <th>Class</th>
+            <th>Section</th>
+            <th>Roll Number</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {students.map((student) => (
+            <tr key={student.id}>
+              <td>{student.id}</td>
+              <td>{student.name}</td>
+              <td>{student.class}</td>
+              <td>{student.section}</td>
+              <td>{student.rollNumber}</td>
+              <td>
+                <button onClick={() => alert("View student")}>View</button>
+                <button onClick={() => alert("Edit student")}>Edit</button>
+                <button onClick={() => handleDelete(student.id)}>Delete</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {showModal && <StudentModal closeModal={() => setShowModal(false)} fetchStudents={fetchStudents} />}
+    </div>
+  );
+}
+
+export default StudentsPage;
+
+│   ├── firebase.js
+
+// firebase.js
+import { initializeApp } from "firebase/app";
+import { getFirestore } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
+
+const firebaseConfig = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_AUTH_DOMAIN",
+  projectId: "YOUR_PROJECT_ID",
+  storageBucket: "YOUR_STORAGE_BUCKET",
+  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+  appId: "YOUR_APP_ID",
+};
+
+const app = initializeApp(firebaseConfig);
+export const db = getFirestore(app);
+export const auth = getAuth(app);
+
+│   ├── App.js
+
+// App.js
+import React from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import Login
